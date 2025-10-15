@@ -107,50 +107,92 @@ SERIAL_COMMANDS_ERRORS SerialCommands::ReadSerial()
 		if (term_[++term_pos_] == 0)
 		{
 			buffer_[buffer_pos_ - strlen(term_)] = '\0';
-
-#ifdef SERIAL_COMMANDS_DEBUG
-			Serial.print("Received: [");
-			Serial.print(buffer_);
-			Serial.println("]");
-#endif
-			char* command = strtok_r(buffer_, delim_, &last_token_);
-			if (command != NULL)
-			{
-				boolean matched = false;
-				int cx;
-				SerialCommand* cmd;
-				for (cmd = commands_head_, cx = 0; cmd != NULL; cmd = cmd->next, cx++)
-				{
-#ifdef SERIAL_COMMANDS_DEBUG
-					Serial.print("Comparing [");
-					Serial.print(command);
-					Serial.print("] to [");
-					Serial.print(cmd->command);
-					Serial.println("]");
-#endif
-
-					if (strncmp(command, cmd->command, strlen(cmd->command) + 1) == 0)
-					{
-#ifdef SERIAL_COMMANDS_DEBUG
-						Serial.print("Matched #");
-						Serial.println(cx);
-#endif
-						cmd->function(this);
-						matched = true;
-						break;
-					}
-				}
-				if (!matched && default_handler_ != NULL)
-				{
-					(*default_handler_)(this, command);
-				}
-			}
-
-			ClearBuffer();
+			ProcessBuffer();
 		}
 	}
 
 	return SERIAL_COMMANDS_SUCCESS;
+}
+
+void SerialCommands::ProcessBuffer()
+{
+	#ifdef SERIAL_COMMANDS_DEBUG
+	Serial.print("Received: [");
+	Serial.print(buffer_);
+	Serial.println("]");
+	#endif
+
+	char* command = strtok_r(buffer_, delim_, &last_token_);
+	if (command == NULL) {
+		ClearBuffer();
+		return;
+	}
+
+	boolean matched = false;
+	int cx;
+	SerialCommand* cmd;
+	for (cmd = commands_head_, cx = 0; cmd != NULL; cmd = cmd->next, cx++)
+	{
+		#ifdef SERIAL_COMMANDS_DEBUG
+		Serial.print("Comparing [");
+		Serial.print(command);
+		Serial.print("] to [");
+		Serial.print(cmd->command);
+		Serial.println("]");
+		#endif
+
+		if (strncmp(command, cmd->command, strlen(cmd->command) + 1) == 0)
+		{
+			#ifdef SERIAL_COMMANDS_DEBUG
+			Serial.print("Matched #");
+			Serial.println(cx);
+			#endif
+			cmd->function(this);
+			matched = true;
+			break;
+		}
+	}
+	if (!matched && default_handler_ != NULL)
+	{
+		(*default_handler_)(this, command);
+	}
+
+	ClearBuffer();
+}
+
+// instead of reading from serial input, manually process this line as if it was sent
+// on the serial input.  only works for non-OneKey commands.
+// any previous buffer is discarded, any in-progress parsing is restarted.
+// do not call from inside another command handler.
+bool SerialCommands::ProcessCommandLine(const char* line)
+{
+	if (!line || strlen(line) == 0)
+		return false;	// invalid input
+
+	if (strlen(line) >= buffer_len_-1)
+		return false;	// not enough buffer space to copy into
+
+	// lock so we can't accidentally be called from a command handler
+	// strtok uses global state and weird recursive calls could potentially mess it up.
+	// if you do need this capability, this can be rewritten to deal with it.
+	if (is_processing_cmdline_)
+		return false;
+	is_processing_cmdline_ = true; // locked
+
+	// clear out anything in progress on the real serial input
+	// (warning: discards any serial input already typed)
+	ClearBuffer();
+
+	// copy in our line string into the buffer, which is same as what reading from Serial does
+	strncpy(buffer_, line, buffer_len_ - 1);
+	buffer_[buffer_len_ - 1] = '\0'; // ensure null-term no matter what
+
+	// process the buffer like as though it was recieved via serial input
+	ProcessBuffer();
+
+	is_processing_cmdline_ = false; // unlock
+
+	return true;
 }
 
 bool SerialCommands::CheckOneKeyCmd()

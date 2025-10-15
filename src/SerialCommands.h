@@ -56,7 +56,8 @@ public:
 		onek_cmds_head_(NULL),
 		onek_cmds_tail_(NULL),
 		commands_count_(0),
-		onek_cmds_count_(0)
+		onek_cmds_count_(0),
+		is_processing_cmdline_(false)
 	{
 	}
 
@@ -107,6 +108,19 @@ public:
 	 */
 	char* Next();
 
+	/**
+		 * \brief Alternative input processing: Treat 'line' as if it was received from the Serial input.
+		 *        NOTE: Do NOT call this from inside any command handler, it will return false
+		 *        This disregards anything currently being typed in via real serial, and clears the buffer afterwards.
+         *        Will not call OneKey commands, only regular commands.
+         *        'line' must be a null-terminated string
+         *        it should be no more than the initial buffer size minus 1
+		 *        'line' should not end in any delimiters (like newline/etc), just type the string you want.
+         *        example: ProcessCommandLine("set wifi_ssid my_network_name");
+		 * \ return True if successful, false if error (string too low, buffer too small to hold command, or, recursive call detected from cmd handler)
+		 */
+	bool ProcessCommandLine(const char* line);
+
 private:
 	Stream* serial_;
 	char* buffer_;
@@ -123,6 +137,7 @@ private:
 	SerialCommand* onek_cmds_tail_;
 	uint8_t commands_count_;
 	uint8_t onek_cmds_count_;
+	bool is_processing_cmdline_;
 
 	/**
 	 * \brief Tests for any one_key command and execute it if found
@@ -130,6 +145,8 @@ private:
 	 *		   also clearing the buffer
 	 **/
 	bool CheckOneKeyCmd();
+
+	void ProcessBuffer();
 };
 
 #endif

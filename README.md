@@ -1,4 +1,6 @@
-# SerialCommands
+# SerialCommands - MODIFIED
+This is a fork that allows you to inject arbitrary commands as if they were typed at the serial console. Useful if you want to use SerialCommands as a central dispatch for quick n dirty message processing from external sources (like MQTT/HTTP/etc)
+
 An Arduino library to tokenize and parse commands received over a serial port. 
 
 Inspired by (original version):
